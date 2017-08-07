@@ -97,8 +97,8 @@ class AutoGB:
         print('\n')
 
 if __name__ == '__main__':
-    name = '130302198804130420 '
-    password = '888888'
+    name = 'your name'
+    password = 'password'
     student = AutoGB(name, password)
     while True:
         try:
