@@ -9,72 +9,78 @@ import sys
 
 
 class AutoGB:
-    def __init__(self, name, pwd, requier=False, clazz=False):
-        self.name = name
-        self.pwd = pwd
-        self.is_study_requier = requier
-        self.is_study_clazz = clazz
-
+    def __init__(self, name, pwd, require=False, clazz=False):
         self.dcap = DesiredCapabilities.PHANTOMJS.copy()
         self.dcap[
             "phantomjs.page.settings.userAgent"] = 'Mozilla/5.0 (Windows NT 6.3; Win64; x64; rv:50.0) Gecko/20100101 Firefox/50.0'
         self.dcap["browserName"] = 'Firefox'
         self.driver = webdriver.PhantomJS(desired_capabilities=self.dcap)
 
-        self.url_require_courses = 'http://www.hebgb.gov.cn/student/course!list.action?course.course_type=0&init=yes'
-        self.url_elective_courses = 'http://www.hebgb.gov.cn/student/course!list.action?course.course_type=1&init=yes'
+        self.login(name, pwd)
+        self.study(require, clazz)
 
-    def study(self):
+    def study(self, study_require, study_clazz):
+        all_courses = []
+        url_courses = 'http://www.hebgb.gov.cn/student/course!list.action?course.course_type={}&init=yes'
         try:
-            self.login()
-            if self.is_study_clazz:
+            if study_clazz:  # 学习网班
                 clazzes = self.get_clazzes()
                 if not clazzes:
                     print('***** 没有网班可学习，请登录网站检查！！！ *****')
                 else:
-                    for clazz in clazzes:
-                        courses = self.get_course_names_ids(clazz[1])
-                        if not courses:
-                            print('*** 网班 {} 课程已全部学完！ ***'.format(clazz[0]))
-                        else:
-                            print('选择网班：“{}” '.format(clazz[0]))
-                            for c in courses:
-                                url_video = self.choose_course(c[1])
-                                self.learn(url_video, c)
-                    else:
-                        sys.exit()
+                    all_courses.extend(clazzes)
+            if study_require:  # 学习必修课
+                url_require_courses_nostudy = url_courses.format('0&noStudy=1')  # 未学
+                url_require_courses = url_courses.format(0)  # 已学
+                all_courses.extend(('还未学的必修课', url_require_courses_nostudy), ('正在学的必修课', url_require_courses))
+
+            url_elective_courses = url_courses.format(1)
+            all_courses.append(('选修课', url_elective_courses))
+
+            for c in all_courses:
+                courses = self.get_course_names_ids(c[1])
+                if not courses:
+                    print('*** {} 课程已全部学完！ ***'.format(c[0]))
+                else:
+                    print('选择“{}” 学习……'.format(c[0]))
+                    for course in courses:
+                        url_video = self.choose_course(course[1])
+                        self.learn(url_video, course)
+            else:
+                sys.exit()
         except Exception as e:
             print('Study:', e)
 
-    def login(self):
+    def login(self, name, pwd):
         url_login = 'http://www.hebgb.gov.cn/login.jsp'  # 登录页面
         try:
             self.driver.get(url_login)
-            self.driver.find_element_by_id('name').send_keys(self.name)
-            self.driver.find_element_by_id('password').send_keys(self.pwd)
+            self.driver.find_element_by_id('name').send_keys(name)
+            self.driver.find_element_by_id('password').send_keys(pwd)
             self.driver.find_element_by_xpath('//input[@class="pbtn03"]').click()
-            #self.driver.save_screenshot('0 login.png')
+            # self.driver.save_screenshot('0 login.png')
             if self.driver.current_url == url_login:  # 根据网站页面跳转判断是否登录成功
                 print('*** 账户名或密码不正确，未登录！！！ ***')
             else:
-                print('=== 用户 {} 已登录 ==='.format(self.name))
+                print('=== 用户 {} 已登录 ==='.format(name))
         except Exception as e:
             print('Login:', e)
             raise
 
     def get_clazzes(self):
+        """返回[(网班名，网班url)]列表"""
         url_clazzes = 'http://www.hebgb.gov.cn/student/clazz!myclazz.action?init'  # 我的网班
         try:
             self.driver.get(url_clazzes)
             time.sleep(1)
-            #self.driver.save_screenshot('0 clazzes.png')
+            # self.driver.save_screenshot('0 clazzes.png')
             clazz_names_urls = []
             clazzes = self.driver.find_elements_by_css_selector("div.col-sm-6.col-md-3")
             for c in clazzes:
-                clazz_name = c.find_element_by_css_selector("p.t2").text
+                clazz_name = '网班：' + c.find_element_by_css_selector("p.t2").text
                 url_clazz = c.find_element_by_css_selector("a.pbtn04").get_attribute("href")
-                #print(url_clazz)
-                if url_clazz:   # 跳过已结束网班
+                # print(url_clazz)
+                if url_clazz:  # 跳过已结束网班
                     clazz_names_urls.append((clazz_name, url_clazz))
             return clazz_names_urls
         except Exception as e:
@@ -82,10 +88,11 @@ class AutoGB:
             raise
 
     def get_course_names_ids(self, url_courses):
+        """通过网址，返回未学完的[(课程名，课程ID)]列表"""
         try:
             self.driver.get(url_courses)
             time.sleep(1)
-            #self.driver.save_screenshot('0 get_ids.png')
+            # self.driver.save_screenshot('0 get_ids.png')
             courses = self.driver.find_elements_by_css_selector("div.col-sm-6.col-md-4")
             courses_names_ids = []
             for c in courses:
@@ -107,17 +114,21 @@ class AutoGB:
         try:
             self.driver.get(url_get_list.format(course_id))
             temp = self.driver.page_source
-            data = int(re.search('.*>([\-]\d+)<.*', temp).group(1))
+            print('Data:', temp)
+            data = int(re.search('.*>(-?\d+)<.*', temp).group(1))
             if data >= 1:  # data=1 直接播放； data>1 div videoList 选集播放
-                url_video = 'http://www.hebgb.gov.cn/student/course!playNew.action?userCourse.id={}&index=0'.format(course_id)
-            else:          # date = -1  table 选集播放
+                url_video = 'http://www.hebgb.gov.cn/student/course!playNew.action?userCourse.id={}&index=0'.format(
+                    course_id)
+            else:  # date = -1  table 选集播放
                 rand = random.random()
                 url_table = 'http://www.hebgb.gov.cn/student/course!scormList.action?userCourse.id={}&random={}'
                 self.driver.get(url_table.format(course_id, rand))
                 self.driver.switch_to.window(self.driver.window_handles[-1])
                 temp = self.driver.find_element_by_css_selector('table.dataTable img').get_attribute('onclick')
                 item_id = re.search('play\((\d+)\);', temp).group(1)
-                url_video = 'http://www.hebgb.gov.cn/student/course!playScorm.action?userCourse.id={}&courseItem.id={}&random={}'.format(course_id, item_id, rand)
+                print('Play:', temp)
+                url_video = 'http://www.hebgb.gov.cn/student/course!playScorm.action?userCourse.id={}&courseItem.id={}&random={}'.format(
+                    course_id, item_id, rand)
             self.driver.save_screenshot('0 choose.png')
             return url_video
         except Exception as e:
@@ -155,14 +166,15 @@ class AutoGB:
                 if times % 10 == 0:
                     self.driver.refresh()
                     print('============定时刷新============')
-                    print('继续学习《{}》'.format(course[0]))
+                    print('\n继续学习《{}》'.format(course[0]))
+                    print('共需学习{}分钟'.format(total_time))
         except Exception as e:
             print('Learn:', e)
             raise
 
 
 if __name__ == '__main__':
-    name = '130302196406018717'
+    name = '130302196702281835'
     password = '888888'
-    student = AutoGB(name, password, clazz=True)
+    student = AutoGB(name, password, True, True)
     student.study()
