@@ -32,7 +32,8 @@ class AutoGB:
             if study_require:  # 学习必修课
                 url_require_courses_nostudy = url_courses.format('0&noStudy=1')  # 未学
                 url_require_courses = url_courses.format(0)  # 已学
-                all_courses.extend(('还未学的必修课', url_require_courses_nostudy), ('正在学的必修课', url_require_courses))
+                all_courses.append(('还未学的必修课', url_require_courses_nostudy))
+                all_courses.append(('正在学的必修课', url_require_courses))
 
             url_elective_courses = url_courses.format(1)
             all_courses.append(('选修课', url_elective_courses))
@@ -40,7 +41,7 @@ class AutoGB:
             for c in all_courses:
                 courses = self.get_course_names_ids(c[1])
                 if not courses:
-                    print('*** {} 课程已全部学完！ ***'.format(c[0]))
+                    print('*** “{}” 课程已全部学完！ ***'.format(c[0]))
                 else:
                     print('选择“{}” 学习……'.format(c[0]))
                     for course in courses:
@@ -50,6 +51,7 @@ class AutoGB:
                 sys.exit()
         except Exception as e:
             print('Study:', e)
+            raise
 
     def login(self, name, pwd):
         url_login = 'http://www.hebgb.gov.cn/login.jsp'  # 登录页面
@@ -177,4 +179,3 @@ if __name__ == '__main__':
     name = '130302196702281835'
     password = '888888'
     student = AutoGB(name, password, True, True)
-    student.study()
